@@ -1,0 +1,13 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #f6f4ef;
+  --foreground: #14323d;
+  --font-display: "Roboto Slab", Georgia, serif;
+  --font-sans: "Inter", system-ui, sans-serif;
+}
+
+html { -webkit-font-smoothing: antialiased; }
+body { color: var(--foreground); background: var(--background); }
