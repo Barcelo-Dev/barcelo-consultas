@@ -27,21 +27,19 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  // Refresca la sesión y obtiene el usuario.
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   const path = request.nextUrl.pathname;
 
-  // Protege el dashboard: sin sesión -> login.
+
   if (path.startsWith("/dashboard") && !user) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
   }
 
-  // Si ya hay sesión y va a /login, mándalo al dashboard.
   if (path === "/login" && user) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
