@@ -182,7 +182,7 @@ export default function DashboardClient({ rows: initialRows }: { rows: Subscribe
           )}
           {analytics.best && (
             <p className="mt-4 rounded-lg bg-barcelo-cream px-3 py-2 text-sm text-barcelo-ink">
-              📈 El mes con más registros fue{" "}
+              El mes con más registros fue{" "}
               <span className="font-semibold capitalize">{monthLabel(analytics.best[0])}</span>{" "}
               con <span className="font-semibold">{analytics.best[1]}</span>.
             </p>
