@@ -11,4 +11,3 @@ npm-debug.log*
 *.pem
 .vercel
 *.tsbuildinfo
-/supabase/

@@ -144,6 +144,7 @@ export default function DashboardClient({ rows: initialRows }: { rows: Subscribe
   // ---- Enviar reporte por correo (Resend) ----
   const [reporteOpen, setReporteOpen] = useState(false);
   const [reporteTo, setReporteTo] = useState("");
+  const [reporteRango, setReporteRango] = useState<"todos" | "semana" | "mes">("todos");
 
   async function enviarReporte() {
     const correos = reporteTo.split(",").map(s => s.trim()).filter(Boolean);
@@ -154,7 +155,7 @@ export default function DashboardClient({ rows: initialRows }: { rows: Subscribe
       const res = await fetch("/api/reporte", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ to: reporteTo }),
+        body: JSON.stringify({ to: reporteTo, rango: reporteRango }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -278,7 +279,7 @@ export default function DashboardClient({ rows: initialRows }: { rows: Subscribe
 
           {meses.totalAnio > 0 && (
             <p className="mt-4 rounded-lg bg-barcelo-cream px-3 py-2 text-sm text-barcelo-ink">
-               En {anioSel}, el mes con más registros fue{" "}
+              📈 En {anioSel}, el mes con más registros fue{" "}
               <span className="font-semibold">{meses.mejorMes}</span>{" "}
               con <span className="font-semibold">{meses.mejorValor}</span>.
             </p>
@@ -315,7 +316,17 @@ export default function DashboardClient({ rows: initialRows }: { rows: Subscribe
             </button>
             {reporteOpen && (
               <div className="absolute right-0 z-20 mt-1 w-80 rounded-lg border border-barcelo-gray/20 bg-white p-4 shadow-lg">
-                <label className="mb-1.5 block text-sm font-medium text-barcelo-ink">Enviar reporte a:</label>
+                <label className="mb-1.5 block text-sm font-medium text-barcelo-ink">¿Qué registros exportar?</label>
+                <select
+                  value={reporteRango}
+                  onChange={e => setReporteRango(e.target.value as "todos" | "semana" | "mes")}
+                  className="mb-3 w-full rounded-lg border border-barcelo-gray/30 bg-white px-3 py-2 text-sm outline-none focus:border-barcelo-teal"
+                >
+                  <option value="todos">Todos los registros</option>
+                  <option value="semana">Solo los de esta semana</option>
+                  <option value="mes">Solo los de este mes</option>
+                </select>
+                <label className="mb-1.5 block text-sm font-medium text-barcelo-ink">Enviar a:</label>
                 <input
                   type="text"
                   value={reporteTo}

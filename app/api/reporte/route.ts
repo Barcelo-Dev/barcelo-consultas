@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { enviarReporte, type Registro } from "@/lib/reporte";
+import { enviarReporte, type Registro, type Rango } from "@/lib/reporte";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +23,7 @@ async function autorizado(request: Request): Promise<boolean> {
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-async function enviar(request: Request, toOverride?: string[]) {
+async function enviar(request: Request, toOverride?: string[], rango: Rango = "todos") {
   if (!(await autorizado(request))) {
     return NextResponse.json({ error: "No autorizado." }, { status: 401 });
   }
@@ -40,18 +40,21 @@ async function enviar(request: Request, toOverride?: string[]) {
   }
 
   try {
-    await enviarReporte((data ?? []) as Registro[], toOverride);
+    await enviarReporte((data ?? []) as Registro[], toOverride, rango);
   } catch (e) {
     console.error("Error al enviar el reporte:", e);
     return NextResponse.json({ error: "No se pudo enviar el reporte." }, { status: 502 });
   }
 
-  return NextResponse.json({ ok: true, enviados: (data ?? []).length });
+  return NextResponse.json({ ok: true });
 }
 
-// El botón del panel usa POST y puede traer los correos escritos a mano.
+const RANGOS: Rango[] = ["todos", "semana", "mes", "semana_anterior"];
+
+// El botón del panel usa POST: trae los correos y el rango elegido.
 export async function POST(request: Request) {
   let correos: string[] | undefined;
+  let rango: Rango = "todos";
   try {
     const body = await request.json();
     const crudos = String(body?.to ?? "")
@@ -65,13 +68,15 @@ export async function POST(request: Request) {
       }
       correos = crudos;
     }
+    if (RANGOS.includes(body?.rango)) rango = body.rango;
   } catch {
-    // Sin cuerpo: se usará el correo fijo por defecto.
+    // Sin cuerpo: se usará el correo fijo por defecto y rango "todos".
   }
-  return enviar(request, correos);
+  return enviar(request, correos, rango);
 }
 
 // Vercel Cron invoca el endpoint con GET.
+// El reporte automático SIEMPRE es de la semana anterior (lunes a domingo).
 export async function GET(request: Request) {
-  return enviar(request);
+  return enviar(request, undefined, "semana_anterior");
 }

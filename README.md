@@ -7,7 +7,7 @@
 - Exportar CSV ("Todo el historial" o "Solo registros nuevos").
 - **Reporte por correo (Resend): resumen + Excel adjunto.**
   - Botón "Enviar reporte" en el panel (manual).
-  - Envío automático programado (Vercel Cron): día 1 de cada mes, 7:00 a.m. GT.
+  - Envío automático programado (Vercel Cron): cada lunes, 9:00 a.m. GT.
 
 ## Variables de entorno (Vercel)
 | Variable | Para qué | Tipo |
@@ -21,7 +21,7 @@
 | `CRON_SECRET` | Protege el envío automático | Secret |
 
 ## Envío automático (Vercel Cron)
-- Configurado en `vercel.json`: `"schedule": "0 13 1 * *"` (13:00 UTC = 7:00 a.m. Guatemala, día 1 de cada mes).
+- Configurado en `vercel.json`: `"schedule": "0 15 * * 1"` (15:00 UTC = 9:00 a.m. Guatemala, cada lunes).
 - Para cambiar la frecuencia, edita ese valor (formato cron, en UTC).
 - Vercel envía la petición del cron con `Authorization: Bearer <CRON_SECRET>`,
   por eso debes poner `CRON_SECRET` en las variables de Vercel.
