@@ -38,11 +38,18 @@ function dateOnly(iso: string) {
 function dateTime(iso: string) {
   return new Intl.DateTimeFormat("es-GT", { timeZone: GT, day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
 }
-// Etiqueta de mes legible: "sep 2026"
-function monthLabel(ym: string) {
-  const [y, m] = ym.split("-").map(Number);
-  return new Intl.DateTimeFormat("es-GT", { month: "short", year: "numeric" }).format(new Date(y, m - 1, 1));
+// Devuelve el path SVG de un segmento de dona entre dos ángulos (en grados).
+function arcoDona(cx: number, cy: number, rExt: number, rInt: number, a0: number, a1: number) {
+  const rad = (a: number) => ((a - 90) * Math.PI) / 180;
+  const p = (r: number, a: number) => [cx + r * Math.cos(rad(a)), cy + r * Math.sin(rad(a))];
+  const [x0, y0] = p(rExt, a0);
+  const [x1, y1] = p(rExt, a1);
+  const [x2, y2] = p(rInt, a1);
+  const [x3, y3] = p(rInt, a0);
+  const largo = a1 - a0 > 180 ? 1 : 0;
+  return `M ${x0} ${y0} A ${rExt} ${rExt} 0 ${largo} 1 ${x1} ${y1} L ${x2} ${y2} A ${rInt} ${rInt} 0 ${largo} 0 ${x3} ${y3} Z`;
 }
+
 
 function csvCell(v: string | boolean | null) {
   const s = v === null ? "" : String(v);
@@ -76,24 +83,46 @@ export default function DashboardClient({ rows: initialRows }: { rows: Subscribe
   const thisYM = currentYM();
 
   // ---- Analítica (siempre sobre TODO el historial) ----
+  // Año seleccionado para la gráfica (por defecto, el año en curso).
+  const anioActual = Number(thisYM.slice(0, 4));
+  const [anioSel, setAnioSel] = useState<number>(anioActual);
+
   const analytics = useMemo(() => {
     const total = rows.length;
     const confirmados = rows.filter(r => r.confirmed).length;
     const redimidos = rows.filter(r => r.coupon_redeemed).length;
     const thisMonth = rows.filter(r => ymGT(r.created_at) === thisYM).length;
 
-    const byMonth = new Map<string, number>();
-    for (const r of rows) {
-      const k = ymGT(r.created_at);
-      byMonth.set(k, (byMonth.get(k) ?? 0) + 1);
-    }
-    const monthsSorted = Array.from(byMonth.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-    const last12 = monthsSorted.slice(-12);
-    const maxCount = Math.max(1, ...last12.map(([, c]) => c));
-    const best = monthsSorted.reduce<[string, number] | null>((acc, cur) => (!acc || cur[1] > acc[1] ? cur : acc), null);
+    // Años disponibles (los que tienen registros), de mayor a menor.
+    const aniosSet = new Set<number>();
+    for (const r of rows) aniosSet.add(Number(ymGT(r.created_at).slice(0, 4)));
+    aniosSet.add(anioActual); // el año en curso siempre aparece
+    const anios = Array.from(aniosSet).sort((a, b) => b - a);
 
-    return { total, confirmados, redimidos, thisMonth, last12, maxCount, best };
-  }, [rows, thisYM]);
+    return { total, confirmados, redimidos, thisMonth, anios };
+  }, [rows, thisYM, anioActual]);
+
+  // Datos de los 12 meses del AÑO SELECCIONADO (incluye meses en cero).
+  const meses = useMemo(() => {
+    const conteo = new Array(12).fill(0);
+    for (const r of rows) {
+      const ym = ymGT(r.created_at);
+      if (Number(ym.slice(0, 4)) === anioSel) {
+        const m = Number(ym.slice(5, 7)) - 1;
+        conteo[m]++;
+      }
+    }
+    const totalAnio = conteo.reduce((a, b) => a + b, 0);
+    const nombres = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+    // Rampa de teal: enero (claro) -> diciembre (oscuro).
+    const colores = ["#cfe9f0","#bed8e0","#adc8cf","#9cb7bf","#8ba6af","#7a969f","#69858e","#58757e","#47646e","#36535e","#25434d","#14323d"];
+    const items = conteo.map((c, i) => ({
+      mes: nombres[i], valor: c, color: colores[i],
+      pct: totalAnio > 0 ? (c / totalAnio) * 100 : 0,
+    }));
+    const mejorIdx = conteo.reduce((best, c, i) => (c > conteo[best] ? i : best), 0);
+    return { items, totalAnio, mejorMes: nombres[mejorIdx], mejorValor: conteo[mejorIdx] };
+  }, [rows, anioSel]);
 
   const nuevosCount = useMemo(() => rows.filter(r => !r.exported_at).length, [rows]);
 
@@ -111,6 +140,36 @@ export default function DashboardClient({ rows: initialRows }: { rows: Subscribe
       return true;
     });
   }, [rows, period, statusFilter, query, thisYM]);
+
+  // ---- Enviar reporte por correo (Resend) ----
+  const [reporteOpen, setReporteOpen] = useState(false);
+  const [reporteTo, setReporteTo] = useState("");
+
+  async function enviarReporte() {
+    const correos = reporteTo.split(",").map(s => s.trim()).filter(Boolean);
+    if (correos.length === 0) { setNotice("Escribe al menos un correo destino."); return; }
+
+    setBusy(true); setNotice("");
+    try {
+      const res = await fetch("/api/reporte", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to: reporteTo }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setNotice(data.error ?? "No se pudo enviar el reporte.");
+      } else {
+        setNotice(`Reporte enviado a ${correos.join(", ")} (${data.enviados} registros).`);
+        setReporteOpen(false);
+        setReporteTo("");
+      }
+    } catch {
+      setNotice("Hubo un problema de conexión al enviar el reporte.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   // ---- Exportaciones ----
   function exportAll() {
@@ -157,34 +216,71 @@ export default function DashboardClient({ rows: initialRows }: { rows: Subscribe
           <Stat label="Registros este mes" value={analytics.thisMonth} accent />
         </div>
 
-        {/* Gráfica de registros por mes */}
+        {/* Registros por mes del año seleccionado: donut + tabla */}
         <div className="mt-6">
-          <p className="text-sm font-medium text-barcelo-ink">Registros por mes</p>
-          {analytics.last12.length === 0 ? (
-            <p className="mt-3 text-sm text-barcelo-gray">Aún no hay datos.</p>
-          ) : (
-            <div className="mt-3 flex items-end gap-2 sm:gap-3" style={{ height: 160 }}>
-              {analytics.last12.map(([ym, count]) => {
-                const isBest = analytics.best && ym === analytics.best[0];
-                return (
-                  <div key={ym} className="flex flex-1 flex-col items-center justify-end gap-1">
-                    <span className="text-xs font-semibold text-barcelo-ink">{count}</span>
-                    <div
-                      className={`w-full rounded-t-md ${isBest ? "bg-barcelo-gold" : "bg-barcelo-teal"}`}
-                      style={{ height: `${(count / analytics.maxCount) * 120}px` }}
-                      title={`${monthLabel(ym)}: ${count}`}
-                    />
-                    <span className="mt-1 text-[10px] text-barcelo-gray sm:text-xs">{monthLabel(ym)}</span>
-                  </div>
-                );
-              })}
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium text-barcelo-ink">Registros por mes</p>
+            {/* Selector de año (permite consultar años anteriores) */}
+            <select
+              value={anioSel}
+              onChange={e => setAnioSel(Number(e.target.value))}
+              className="rounded-lg border border-barcelo-gray/30 bg-white px-3 py-1.5 text-sm font-medium outline-none focus:border-barcelo-teal"
+            >
+              {analytics.anios.map(a => <option key={a} value={a}>{a}</option>)}
+            </select>
+          </div>
+
+          <div className="mt-4 grid gap-6 sm:grid-cols-2 sm:items-center">
+            {/* Donut */}
+            <div className="flex items-center justify-center">
+              {meses.totalAnio === 0 ? (
+                <p className="py-10 text-sm text-barcelo-gray">Sin registros en {anioSel}.</p>
+              ) : (
+                <svg viewBox="0 0 200 200" className="w-full max-w-[220px]" role="img" aria-label={`Registros por mes de ${anioSel}`}>
+                  {(() => {
+                    let a = 0;
+                    const arcos = meses.items
+                      .filter(it => it.valor > 0)
+                      .map((it, i) => {
+                        const ang = (it.valor / meses.totalAnio) * 360;
+                        // separador de 2px entre segmentos
+                        const gap = ang > 4 ? 1 : 0;
+                        const path = arcoDona(100, 100, 90, 58, a + gap, a + ang - gap);
+                        a += ang;
+                        return <path key={i} d={path} fill={it.color} />;
+                      });
+                    return arcos;
+                  })()}
+                  <text x="100" y="94" textAnchor="middle" className="fill-barcelo-ink" style={{ fontSize: 30, fontWeight: 700, fontFamily: "Georgia, serif" }}>{meses.totalAnio}</text>
+                  <text x="100" y="114" textAnchor="middle" className="fill-barcelo-gray" style={{ fontSize: 11 }}>registros {anioSel}</text>
+                </svg>
+              )}
             </div>
-          )}
-          {analytics.best && (
+
+            {/* Tabla de los 12 meses (incluye ceros) */}
+            <div>
+              <table className="w-full text-sm">
+                <tbody>
+                  {meses.items.map((it, i) => (
+                    <tr key={i} className="border-b border-barcelo-gray/10 last:border-0">
+                      <td className="py-1.5">
+                        <span className="mr-2 inline-block h-3 w-3 rounded-sm align-middle" style={{ backgroundColor: it.color }} />
+                        <span className={`align-middle ${it.valor === 0 ? "text-barcelo-gray" : "text-barcelo-ink"}`}>{it.mes}</span>
+                      </td>
+                      <td className="py-1.5 text-right font-semibold text-barcelo-ink">{it.valor}</td>
+                      <td className="py-1.5 pl-3 text-right text-xs text-barcelo-gray">{it.pct > 0 ? `${it.pct.toFixed(0)}%` : "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {meses.totalAnio > 0 && (
             <p className="mt-4 rounded-lg bg-barcelo-cream px-3 py-2 text-sm text-barcelo-ink">
-              El mes con más registros fue{" "}
-              <span className="font-semibold capitalize">{monthLabel(analytics.best[0])}</span>{" "}
-              con <span className="font-semibold">{analytics.best[1]}</span>.
+               En {anioSel}, el mes con más registros fue{" "}
+              <span className="font-semibold">{meses.mejorMes}</span>{" "}
+              con <span className="font-semibold">{meses.mejorValor}</span>.
             </p>
           )}
         </div>
@@ -205,6 +301,41 @@ export default function DashboardClient({ rows: initialRows }: { rows: Subscribe
                 Todo el historial
               </button>
             </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+          {/* Enviar reporte por correo */}
+          <div className="relative">
+            <button onClick={() => { setReporteOpen(o => !o); setMenuOpen(false); }} disabled={busy}
+              className="inline-flex items-center gap-2 rounded-lg border border-barcelo-teal px-4 py-2 text-sm font-semibold text-barcelo-teal transition hover:bg-barcelo-teal/5 disabled:opacity-60">
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+              </svg>
+              Enviar reporte
+            </button>
+            {reporteOpen && (
+              <div className="absolute right-0 z-20 mt-1 w-80 rounded-lg border border-barcelo-gray/20 bg-white p-4 shadow-lg">
+                <label className="mb-1.5 block text-sm font-medium text-barcelo-ink">Enviar reporte a:</label>
+                <input
+                  type="text"
+                  value={reporteTo}
+                  onChange={e => setReporteTo(e.target.value)}
+                  placeholder="correo@ejemplo.com"
+                  className="w-full rounded-lg border border-barcelo-gray/30 px-3 py-2 text-sm outline-none focus:border-barcelo-teal focus:ring-2 focus:ring-barcelo-teal/20"
+                />
+                <p className="mt-1.5 text-xs text-barcelo-gray">Separa varios correos con coma.</p>
+                <div className="mt-3 flex justify-end gap-2">
+                  <button onClick={() => { setReporteOpen(false); setReporteTo(""); }}
+                    className="rounded-lg border border-barcelo-gray/30 px-3 py-1.5 text-sm font-medium text-barcelo-ink hover:bg-barcelo-cream">
+                    Cancelar
+                  </button>
+                  <button onClick={enviarReporte} disabled={busy}
+                    className="rounded-lg bg-barcelo-teal px-3 py-1.5 text-sm font-semibold text-white hover:bg-barcelo-deep disabled:opacity-60">
+                    {busy ? "Enviando…" : "Enviar"}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Exportar con opciones */}
@@ -229,6 +360,7 @@ export default function DashboardClient({ rows: initialRows }: { rows: Subscribe
                 </button>
               </div>
             )}
+          </div>
           </div>
         </div>
 
