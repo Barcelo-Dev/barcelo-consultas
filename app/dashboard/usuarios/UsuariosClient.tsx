@@ -103,7 +103,7 @@ export default function UsuariosClient({ users, currentUserId }: { users: Manage
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-barcelo-ink">Contraseña</label>
-            <input type="text" required value={password} onChange={e => setPassword(e.target.value)} placeholder="Mínimo 6 caracteres" className={inputCls} />
+            <input type="password" required value={password} onChange={e => setPassword(e.target.value)} placeholder="Mínimo 6 caracteres" className={inputCls} />
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-barcelo-ink">Rol</label>
