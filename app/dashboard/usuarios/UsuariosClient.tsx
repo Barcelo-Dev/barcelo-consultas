@@ -160,7 +160,7 @@ export default function UsuariosClient({ users, currentUserId }: { users: Manage
                             <option value="admin">Administrador</option>
                           </select>
                         )}
-                        <input value={ePassword} onChange={e => setEPassword(e.target.value)} placeholder="Nueva contraseña (opcional)" className={`${inputCls} mt-2`} />
+                        <input type="password" value={ePassword} onChange={e => setEPassword(e.target.value)} placeholder="Nueva contraseña (opcional)" className={`${inputCls} mt-2`} />
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex justify-end gap-2">

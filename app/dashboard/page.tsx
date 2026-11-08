@@ -6,6 +6,8 @@ import DashboardClient, { type Subscriber } from "./DashboardClient";
 
 export const dynamic = "force-dynamic";
 
+const roleLabel: Record<string, string> = { camarero: "Camarero", supervisor: "Supervisor", admin: "Administrador" };
+
 export default async function DashboardPage() {
   const session = await getSession();
   if (!session) redirect("/login");
@@ -43,12 +45,24 @@ export default async function DashboardPage() {
         <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4 sm:px-6">
           <img src="/logo.png" alt="Barceló Guatemala City" className="h-7 w-auto" />
           <div className="flex items-center gap-3 sm:gap-4">
+            {/* Identidad del usuario */}
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-barcelo-teal/10 text-sm font-bold uppercase text-barcelo-deep">
+                {(session.username || session.email || "?").charAt(0)}
+              </div>
+              <div className="hidden leading-tight sm:block">
+                <p className="text-sm font-semibold text-barcelo-ink">{session.username || session.email}</p>
+                <p className="text-xs text-barcelo-gray">{roleLabel[session.role ?? ""] ?? "Usuario"}</p>
+              </div>
+            </div>
+
+            <div className="h-6 w-px bg-barcelo-gray/20" />
+
             {session.role === "admin" && (
               <Link href="/dashboard/usuarios" className="rounded-lg border border-barcelo-gray/30 px-3 py-1.5 text-sm font-medium text-barcelo-ink transition hover:bg-barcelo-cream">
                 Usuarios
               </Link>
             )}
-            <span className="hidden text-sm text-barcelo-gray sm:inline">{session.username || session.email}</span>
             <form action="/auth/signout" method="post">
               <button type="submit" className="rounded-lg border border-barcelo-gray/30 px-3 py-1.5 text-sm font-medium text-barcelo-ink transition hover:bg-barcelo-cream">
                 Cerrar sesión
