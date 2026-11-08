@@ -5,7 +5,7 @@ import { createBrowserSupabase } from "@/lib/supabase/client";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const [identificador, setIdentificador] = useState(""); // usuario o correo
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -13,10 +13,22 @@ export default function LoginPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(""); setLoading(true);
-    const supabase = createBrowserSupabase();
-    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-    if (error) { setError("Correo o contraseña incorrectos."); setLoading(false); return; }
-    router.push("/dashboard"); router.refresh();
+    try {
+      // 1) Traducir "usuario o correo" al correo real.
+      const res = await fetch("/api/resolve-login", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identificador: identificador.trim() }),
+      });
+      const { email } = await res.json();
+
+      // 2) Iniciar sesión con ese correo.
+      const supabase = createBrowserSupabase();
+      const { error } = await supabase.auth.signInWithPassword({ email: email || identificador.trim(), password });
+      if (error) { setError("Usuario/correo o contraseña incorrectos."); setLoading(false); return; }
+      router.push("/dashboard"); router.refresh();
+    } catch {
+      setError("Hubo un problema al iniciar sesión. Inténtalo de nuevo."); setLoading(false);
+    }
   }
 
   return (
@@ -29,13 +41,15 @@ export default function LoginPage() {
         </div>
         <form onSubmit={handleSubmit} className="space-y-4 rounded-2xl bg-white p-8 shadow-xl">
           <div>
-            <label htmlFor="email" className="mb-1.5 block text-sm font-medium text-barcelo-ink">Correo</label>
-            <input id="email" type="email" required value={email} onChange={(e)=>setEmail(e.target.value)}
+            <label htmlFor="identificador" className="mb-1.5 block text-sm font-medium text-barcelo-ink">Usuario o correo</label>
+            <input id="identificador" type="text" required value={identificador} onChange={(e)=>setIdentificador(e.target.value)}
+              autoComplete="username"
               className="w-full rounded-lg border border-barcelo-gray/30 px-4 py-2.5 outline-none transition focus:border-barcelo-teal focus:ring-2 focus:ring-barcelo-teal/20" />
           </div>
           <div>
             <label htmlFor="password" className="mb-1.5 block text-sm font-medium text-barcelo-ink">Contraseña</label>
             <input id="password" type="password" required value={password} onChange={(e)=>setPassword(e.target.value)}
+              autoComplete="current-password"
               className="w-full rounded-lg border border-barcelo-gray/30 px-4 py-2.5 outline-none transition focus:border-barcelo-teal focus:ring-2 focus:ring-barcelo-teal/20" />
           </div>
           {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}

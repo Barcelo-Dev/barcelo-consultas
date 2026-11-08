@@ -1,14 +1,35 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createServerSupabase } from "@/lib/supabase/server";
+import { getSession, puedeConsultar } from "@/lib/roles";
 import DashboardClient, { type Subscriber } from "./DashboardClient";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const supabase = createServerSupabase();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const session = await getSession();
+  if (!session) redirect("/login");
 
+  // Control de acceso por rol: solo admin y supervisor entran a consultas.
+  if (!puedeConsultar(session.role)) {
+    return (
+      <div className="flex min-h-[100svh] items-center justify-center px-6">
+        <div className="max-w-sm rounded-2xl bg-white p-8 text-center shadow-xl">
+          <h1 className="font-display text-xl font-bold text-barcelo-ink">Sin acceso</h1>
+          <p className="mt-2 text-sm text-barcelo-gray">
+            Tu usuario no tiene permiso para el portal de consultas. Si crees que es un error, contacta al administrador.
+          </p>
+          <form action="/auth/signout" method="post" className="mt-5">
+            <button type="submit" className="rounded-lg bg-barcelo-teal px-4 py-2 text-sm font-semibold text-white hover:bg-barcelo-deep">
+              Cerrar sesión
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  const supabase = createServerSupabase();
   const { data: subscribers, error } = await supabase
     .from("subscribers")
     .select("id, email, full_name, room_number, source, consent, confirmed, coupon_code, coupon_redeemed, exported_at, created_at")
@@ -22,7 +43,12 @@ export default async function DashboardPage() {
         <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4 sm:px-6">
           <img src="/logo.png" alt="Barceló Guatemala City" className="h-7 w-auto" />
           <div className="flex items-center gap-3 sm:gap-4">
-            <span className="hidden text-sm text-barcelo-gray sm:inline">{user.email}</span>
+            {session.role === "admin" && (
+              <Link href="/dashboard/usuarios" className="rounded-lg border border-barcelo-gray/30 px-3 py-1.5 text-sm font-medium text-barcelo-ink transition hover:bg-barcelo-cream">
+                Usuarios
+              </Link>
+            )}
+            <span className="hidden text-sm text-barcelo-gray sm:inline">{session.username || session.email}</span>
             <form action="/auth/signout" method="post">
               <button type="submit" className="rounded-lg border border-barcelo-gray/30 px-3 py-1.5 text-sm font-medium text-barcelo-ink transition hover:bg-barcelo-cream">
                 Cerrar sesión
