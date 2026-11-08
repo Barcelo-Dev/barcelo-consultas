@@ -23,13 +23,13 @@ export default function UsuariosClient({ users, currentUserId }: { users: Manage
   const [username, setUsername] = useState("");
   const [fullName, setFullName] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<"camarero" | "supervisor">("camarero");
+  const [role, setRole] = useState<"camarero" | "supervisor" | "admin">("camarero");
 
   // Editar (usuario en edición)
   const [editId, setEditId] = useState<string | null>(null);
   const [eUsername, setEUsername] = useState("");
   const [eFullName, setEFullName] = useState("");
-  const [eRole, setERole] = useState<"camarero" | "supervisor">("camarero");
+  const [eRole, setERole] = useState<"camarero" | "supervisor" | "admin">("camarero");
   const [ePassword, setEPassword] = useState("");
 
   async function call(payload: Record<string, unknown>) {
@@ -61,16 +61,15 @@ export default function UsuariosClient({ users, currentUserId }: { users: Manage
     setEditId(u.id);
     setEUsername(u.username ?? "");
     setEFullName(u.full_name ?? "");
-    setERole(u.role === "supervisor" ? "supervisor" : "camarero");
+    setERole(u.role);
     setEPassword("");
     setMsg(null);
   }
 
   async function guardarEdicion(u: ManagedUser) {
     const payload: Record<string, unknown> = {
-      action: "update", id: u.id, username: eUsername, fullName: eFullName,
+      action: "update", id: u.id, username: eUsername, fullName: eFullName, role: eRole,
     };
-    if (u.role !== "admin") payload.role = eRole;        // el rol de un admin no se cambia aquí
     if (ePassword.trim()) payload.password = ePassword;  // solo si se escribió una nueva
     const ok = await call(payload);
     if (ok) { setMsg({ type: "ok", text: "Cambios guardados." }); setEditId(null); router.refresh(); }
@@ -108,9 +107,10 @@ export default function UsuariosClient({ users, currentUserId }: { users: Manage
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-barcelo-ink">Rol</label>
-            <select value={role} onChange={e => setRole(e.target.value as "camarero" | "supervisor")} className={inputCls}>
+            <select value={role} onChange={e => setRole(e.target.value as "camarero" | "supervisor" | "admin")} className={inputCls}>
               <option value="camarero">Camarero</option>
               <option value="supervisor">Supervisor</option>
+              <option value="admin">Administrador</option>
             </select>
           </div>
           <div className="flex items-end sm:col-span-2">
@@ -140,8 +140,6 @@ export default function UsuariosClient({ users, currentUserId }: { users: Manage
           <tbody>
             {users.map(u => {
               const isSelf = u.id === currentUserId;
-              const isAdmin = u.role === "admin";
-              const bloqueado = isAdmin && !isSelf;
               const editing = editId === u.id;
               return (
                 <tr key={u.id} className="border-b border-barcelo-gray/10 align-top last:border-0">
@@ -153,12 +151,13 @@ export default function UsuariosClient({ users, currentUserId }: { users: Manage
                       <td className="px-4 py-3"><input value={eUsername} onChange={e => setEUsername(e.target.value)} placeholder="usuario" className={inputCls} /></td>
                       <td className="px-4 py-3"><input value={eFullName} onChange={e => setEFullName(e.target.value)} placeholder="nombre" className={inputCls} /></td>
                       <td className="px-4 py-3">
-                        {isAdmin ? (
-                          <span className="inline-block rounded-full bg-barcelo-cream px-2.5 py-0.5 text-xs font-medium text-barcelo-deep">Administrador</span>
+                        {isSelf ? (
+                          <span className="inline-block rounded-full bg-barcelo-cream px-2.5 py-0.5 text-xs font-medium text-barcelo-deep" title="No puedes cambiar tu propio rol">{roleLabel[u.role]}</span>
                         ) : (
-                          <select value={eRole} onChange={e => setERole(e.target.value as "camarero" | "supervisor")} className={inputCls}>
+                          <select value={eRole} onChange={e => setERole(e.target.value as "camarero" | "supervisor" | "admin")} className={inputCls}>
                             <option value="camarero">Camarero</option>
                             <option value="supervisor">Supervisor</option>
+                            <option value="admin">Administrador</option>
                           </select>
                         )}
                         <input value={ePassword} onChange={e => setEPassword(e.target.value)} placeholder="Nueva contraseña (opcional)" className={`${inputCls} mt-2`} />
@@ -179,15 +178,9 @@ export default function UsuariosClient({ users, currentUserId }: { users: Manage
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex justify-end gap-2">
-                          {bloqueado ? (
-                            <span className="text-xs text-barcelo-gray">Gestionado en Supabase</span>
-                          ) : (
-                            <>
-                              <button onClick={() => abrirEdicion(u)} className="rounded-lg border border-barcelo-gray/30 px-3 py-1.5 text-sm font-medium text-barcelo-ink hover:bg-barcelo-cream">Editar</button>
-                              {!isSelf && !isAdmin && (
-                                <button onClick={() => eliminar(u)} disabled={busy} className="rounded-lg border border-red-200 px-3 py-1.5 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-60">Eliminar</button>
-                              )}
-                            </>
+                          <button onClick={() => abrirEdicion(u)} className="rounded-lg border border-barcelo-gray/30 px-3 py-1.5 text-sm font-medium text-barcelo-ink hover:bg-barcelo-cream">Editar</button>
+                          {!isSelf && (
+                            <button onClick={() => eliminar(u)} disabled={busy} className="rounded-lg border border-red-200 px-3 py-1.5 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-60">Eliminar</button>
                           )}
                         </div>
                       </td>
