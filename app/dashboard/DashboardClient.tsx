@@ -349,7 +349,7 @@ export default function DashboardClient({ rows: initialRows, canDelete = false }
 
           {meses.totalAnio > 0 && (
             <p className="mt-4 rounded-lg bg-barcelo-cream px-3 py-2 text-sm text-barcelo-ink">
-              📈 En {anioSel}, el mes con más registros fue{" "}
+              En {anioSel}, el mes con más registros fue{" "}
               <span className="font-semibold">{meses.mejorMes}</span>{" "}
               con <span className="font-semibold">{meses.mejorValor}</span>.
             </p>
