@@ -37,3 +37,10 @@ export async function getSession(): Promise<SessionInfo | null> {
 export const puedeConsultar = (r: Role | null) => r === "admin" || r === "supervisor";
 // Quién puede gestionar usuarios: solo admin.
 export const esAdmin = (r: Role | null) => r === "admin";
+
+// ---- Permiso para ELIMINAR registros (por nombre de usuario) ----
+// Solo estos usuarios pueden borrar registros (uno por uno o todos).
+// Para agregar o quitar a alguien, edita esta lista (en minúsculas).
+export const ELIMINADORES = ["jpzuncar", "rmiralbes"];
+export const puedeEliminar = (username: string | null) =>
+  !!username && ELIMINADORES.includes(username.trim().toLowerCase());

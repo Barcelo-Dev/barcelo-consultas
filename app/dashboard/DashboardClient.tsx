@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Swal from "sweetalert2";
 import { createBrowserSupabase } from "@/lib/supabase/client";
 
 export type Subscriber = {
@@ -71,7 +72,7 @@ function download(csv: string, name: string) {
   URL.revokeObjectURL(url);
 }
 
-export default function DashboardClient({ rows: initialRows }: { rows: Subscriber[] }) {
+export default function DashboardClient({ rows: initialRows, canDelete = false }: { rows: Subscriber[]; canDelete?: boolean }) {
   const [rows, setRows] = useState<Subscriber[]>(initialRows);
   const [period, setPeriod] = useState<Period>("month");
   const [query, setQuery] = useState("");
@@ -201,6 +202,75 @@ export default function DashboardClient({ rows: initialRows }: { rows: Subscribe
     }
   }
 
+  // ---- Eliminar registros (solo usuarios autorizados) ----
+  async function eliminarUno(r: Subscriber) {
+    const res = await Swal.fire({
+      title: "¿Eliminar este registro?",
+      html: `Se eliminará de forma permanente el registro de <b>${r.full_name || r.email}</b>${r.coupon_code ? ` (cupón <b>${r.coupon_code}</b>)` : ""}.<br>Esta acción no se puede deshacer.`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Sí, eliminar",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#dc2626",
+      cancelButtonColor: "#8e9091",
+    });
+    if (!res.isConfirmed) return;
+
+    setBusy(true); setNotice("");
+    try {
+      const resp = await fetch("/api/registros", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "delete_one", id: r.id }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error);
+      setRows(prev => prev.filter(x => x.id !== r.id));
+      Swal.fire({ title: "Eliminado", text: "El registro se eliminó correctamente.", icon: "success", confirmButtonColor: "#309dba", timer: 1800, timerProgressBar: true });
+    } catch (e: any) {
+      Swal.fire({ title: "Error", text: e?.message || "No se pudo eliminar el registro.", icon: "error", confirmButtonColor: "#309dba" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function eliminarTodos() {
+    const total = rows.length;
+    if (total === 0) { setNotice("No hay registros que eliminar."); return; }
+
+    const res = await Swal.fire({
+      title: "Eliminar TODOS los registros",
+      html: `Vas a eliminar de forma permanente los <b>${total}</b> registros, incluyendo sus cupones y canjes.<br>Esta acción <b>no se puede deshacer</b>.<br><br>Para confirmar, escribe <b>ELIMINAR</b>:`,
+      icon: "warning",
+      input: "text",
+      inputPlaceholder: "ELIMINAR",
+      showCancelButton: true,
+      confirmButtonText: "Eliminar todo",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#dc2626",
+      cancelButtonColor: "#8e9091",
+      inputValidator: (value) => (value.trim().toUpperCase() !== "ELIMINAR" ? 'Escribe "ELIMINAR" para confirmar.' : undefined),
+    });
+    if (!res.isConfirmed) return;
+
+    setBusy(true); setNotice("");
+    try {
+      const resp = await fetch("/api/registros", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "delete_all" }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error);
+      setRows([]);
+      Swal.fire({ title: "Listo", text: `Se eliminaron ${data.deleted} registros.`, icon: "success", confirmButtonColor: "#309dba" });
+    } catch (e: any) {
+      Swal.fire({ title: "Error", text: e?.message || "No se pudieron eliminar los registros.", icon: "error", confirmButtonColor: "#309dba" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div>
       <h1 className="font-display text-2xl font-bold text-barcelo-ink">Panel de consultas</h1>
@@ -279,7 +349,7 @@ export default function DashboardClient({ rows: initialRows }: { rows: Subscribe
 
           {meses.totalAnio > 0 && (
             <p className="mt-4 rounded-lg bg-barcelo-cream px-3 py-2 text-sm text-barcelo-ink">
-               En {anioSel}, el mes con más registros fue{" "}
+              En {anioSel}, el mes con más registros fue{" "}
               <span className="font-semibold">{meses.mejorMes}</span>{" "}
               con <span className="font-semibold">{meses.mejorValor}</span>.
             </p>
@@ -372,6 +442,17 @@ export default function DashboardClient({ rows: initialRows }: { rows: Subscribe
               </div>
             )}
           </div>
+
+          {/* Eliminar todos (solo usuarios autorizados) */}
+          {canDelete && (
+            <button onClick={eliminarTodos} disabled={busy}
+              className="inline-flex items-center gap-2 rounded-lg border border-red-300 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-60">
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+              </svg>
+              Eliminar todos
+            </button>
+          )}
           </div>
         </div>
 
@@ -402,11 +483,12 @@ export default function DashboardClient({ rows: initialRows }: { rows: Subscribe
                 <th className="px-4 py-3 font-semibold">Cupón</th>
                 <th className="px-4 py-3 font-semibold">Estado</th>
                 <th className="px-4 py-3 font-semibold">Registro</th>
+                {canDelete && <th className="px-4 py-3 text-right font-semibold">Acciones</th>}
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={6} className="px-4 py-10 text-center text-barcelo-gray">No hay registros que coincidan.</td></tr>
+                <tr><td colSpan={canDelete ? 7 : 6} className="px-4 py-10 text-center text-barcelo-gray">No hay registros que coincidan.</td></tr>
               ) : filtered.map(r => (
                 <tr key={r.id} className="border-b border-barcelo-gray/10 last:border-0 hover:bg-barcelo-cream/50">
                   <td className="px-4 py-3 font-medium text-barcelo-ink">{r.email}</td>
@@ -417,6 +499,16 @@ export default function DashboardClient({ rows: initialRows }: { rows: Subscribe
                     {r.confirmed ? <Badge tone="green">Confirmado</Badge> : <Badge tone="amber">Pendiente</Badge>}
                   </td>
                   <td className="px-4 py-3 text-barcelo-gray">{dateTime(r.created_at)}</td>
+                  {canDelete && (
+                    <td className="px-4 py-3 text-right">
+                      <button onClick={() => eliminarUno(r)} disabled={busy} title="Eliminar registro"
+                        className="inline-flex items-center justify-center rounded-lg border border-red-200 p-2 text-red-600 transition hover:bg-red-50 disabled:opacity-60">
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                        </svg>
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

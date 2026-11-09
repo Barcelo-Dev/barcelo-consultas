@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createServerSupabase } from "@/lib/supabase/server";
-import { getSession, puedeConsultar } from "@/lib/roles";
+import { getSession, puedeConsultar, puedeEliminar } from "@/lib/roles";
 import DashboardClient, { type Subscriber } from "./DashboardClient";
 
 export const dynamic = "force-dynamic";
@@ -75,7 +75,7 @@ export default async function DashboardPage() {
         {error ? (
           <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">No se pudieron cargar los registros: {error.message}</p>
         ) : (
-          <DashboardClient rows={rows} />
+          <DashboardClient rows={rows} canDelete={puedeEliminar(session.username)} />
         )}
       </main>
     </div>
